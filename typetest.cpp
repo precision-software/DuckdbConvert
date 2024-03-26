@@ -34,8 +34,8 @@ int main()
 
 	auto result = con.SendQuery(sql);
 
-	sendDuckType(*result);
-	sendDuckData(*result);
+	sendDuckTypeResult(*result);
+	sendDuckDataResult(*result);
 
 
 

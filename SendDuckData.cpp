@@ -6,8 +6,8 @@
 using namespace duckdb;
 
 // Forward refs
-void sendDuckData(const DataChunk &chunk);
-void sendDuckData(const DataChunk &chunk, idx_t row);
+void sendDuckDataChunk(const DataChunk &chunk);
+void sendDuckDataRow(const DataChunk &chunk, idx_t row);
 
 struct sendDuckData {
 	static void Any(const Value &value);
@@ -20,50 +20,45 @@ struct sendDuckData {
 	static void Primitive(const Value &value);
 };
 
-void sendDuckData(QueryResult &result)
+void sendDuckDataResult(QueryResult &result)
 {
-	send("RESULT_DATA(");
-
 	// Send each chunk in the result
 	while (const auto chunk = result.Fetch())
 	{
-		sendDuckData(*chunk);
-		send(", ");
+		sendDuckDataChunk(*chunk);
 	}
-
-	send(")");
 }
 
-void sendDuckData(const DataChunk &chunk)
+void sendDuckDataChunk(const DataChunk &chunk)
 {
-	// Send the prefix
-	send("CHUNK_DATA(");
-
 	// Send each row of data from the chunk
 	idx_t nrRows = chunk.size();
 	for (idx_t row = 0; row < nrRows; row++)
 	{
-		sendDuckData(chunk, row);
-		send(", ");
+		sendDuckDataRow(chunk, row);
 	}
-
-	// Send the suffix
-	send(")");
 }
 
-
-void sendDuckData(const DataChunk &chunk, idx_t row)
+/*
+ * Send a row of data from the query result.
+ */
+void sendDuckDataRow(const DataChunk &chunk, idx_t row)
 {
+	send("(");
+	string separator = "";
+
 	// Send each column of data from the row
 	idx_t nrColumns = chunk.ColumnCount();
-	send("ROW_DATA(");
 	for (idx_t col = 0; col < nrColumns; col++)
 	{
 		auto value = chunk.GetValue(col, row);
 		sendDuckData::Any(value);
-		send(", ");
+
+		send(separator);
+		separator = ",";
 	}
-	send(")");
+
+	send(")\n");
 }
 
 
@@ -92,11 +87,17 @@ void sendDuckData::Any(const Value &value)
 
 void sendDuckData::Struct(const Value &value)
 {
-	send("STRUCT_DATA(");
-	for (const auto child : StructValue::GetChildren(value))
+	send("(");
+	string separator = "";
+
+	const auto &children = StructValue::GetChildren(value);
+	idx_t nrChildren = children.size();
+	for (const auto &child : StructValue::GetChildren(value))
 	{
+		send(separator);
+		separator = ",";
+
 		sendDuckData::Any(child);
-		send(", ");
 	}
 	send(")");
 }
@@ -104,42 +105,50 @@ void sendDuckData::Struct(const Value &value)
 
 void sendDuckData::Map(const Value &value)
 {
-	send("MAP_DATA(");
+	send("(");
+
+	// Get the children - one for each key,value pair
+    const auto &children = ListValue::GetChildren(value);
 
 	// Send array of keys
-	send("ARRAY_DATA(");
+	send("(");
+	string separator = "";
 	for (const auto &pair: ListValue::GetChildren(value))
 	{
+		send(separator);
+		separator = ",";
+
 		const auto &key = StructValue::GetChildren(pair)[0];
 		sendDuckData::Any(key);
-		send(", ");
 	}
-	send(")");
-	send(", ");
+
+	// Between the keys and values
+	send(").(");
 
 	// Send array of values
-	send("ARRAY_DATA(");
+	separator = "";
 	for (const auto &pair : ListValue::GetChildren(value))
 	{
+		send(separator);
+		separator = ",";
+
 		const auto &value = StructValue::GetChildren(pair)[1];
 		sendDuckData::Any(value);
-		send(", ");
 	}
-	send(")");
-
-	// Send the Map suffix
-	send(")");
+	send("))");
 }
 
 void sendDuckData::Array(const Value &value)
 {
-	send("ARRAY_DATA(");
-	const char *separator = "";
+	send("(");
+
+	string separator = "";
 	for (const auto &child : ArrayValue::GetChildren(value))
 	{
 		send(separator);
+		separator = ",";
+
 		sendDuckData::Any(child);
-		separator = ", ";
 	}
 	send(")");
 }
@@ -156,20 +165,21 @@ void sendDuckData::Enum(const Value &value)
 
 void sendDuckData::List(const Value &value)
 {
-	send("LIST_DATA(");
-	const char *separator = "";
+	send("(");
+	string separator = "";
+
 	for (const auto &child : ListValue::GetChildren(value))
 	{
 		send(separator);
+		separator = ",";
 		sendDuckData::Any(child);
-		separator = ", ";
 	}
 	send(")");
 
 }
 void sendDuckData::Union(const Value &value)
 {
-	send("UNION_DATA(");
+	send("(");
 	const auto tag = UnionValue::GetTag(value);
 	const auto child = UnionValue::GetValue(value);
 	send(tag);
@@ -181,5 +191,5 @@ void sendDuckData::Union(const Value &value)
 
 void sendDuckData::Primitive(const Value &value)
 {
-	send(value.ToString());
+	send(value.ToSQLString());
 }

@@ -12,9 +12,9 @@ extern void send(const char* text);
 extern void send(const string text);
 extern void send(int64_t intValue);
 
-extern void sendDuckType(const duckdb::QueryResult &result);
+extern void sendDuckTypeResult(const duckdb::QueryResult &result);
 extern const char* typeName(duckdb_type typeId);
-extern void sendDuckData(duckdb::QueryResult &result);
+extern void sendDuckDataResult(duckdb::QueryResult &result);
 
 
 /*

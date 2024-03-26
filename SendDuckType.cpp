@@ -26,6 +26,9 @@ struct sendDuckType
  * TODO: how to deal with aliases (already named dependent types).
  * TODO:   maybe ... return a list of types including alias types, bottom up order.
  * TODO:   maybe ... then just use the alias name when referenced in higher types.
+ *
+ * Would be nice if we could add decorative method "send()" to LogicalType
+ * like can be done in Scala.
  */
 
 void sendDuckType::Any(const LogicalType &type)
@@ -53,131 +56,135 @@ void sendDuckType::Any(const LogicalType &type)
 /*
  * Send the types which exist in the query result.
  */
-void sendDuckType(const QueryResult &result)
+void sendDuckTypeResult(const QueryResult &result)
 {
-	send("ROW_TYPE(");
-	for (const auto &type: result.types)
+	send("ROW<");
+	string separator = "";
+	idx_t nrCols = result.types.size();
+	for (int col = 0; col < nrCols; col++)
 	{
-		sendDuckType::Any(type);
-		send(", ");
+		send(separator);
+		separator = ",";
+
+		sendDuckType::Any(result.types[col]);
 	}
-	send(")");
+	send(">\n");
 }
 
 
 void sendDuckType::Map(const LogicalType &type)
 {
 	// Start the MAP by sending prefix
-	send("MAP(");
+	send("MAP<");
 
 	// Send the key type
 	const auto keyType = MapType::KeyType(type);
 	sendDuckType::Any(keyType);
 
-	// Send separator
-	send(", ");
+	// Send separator between key and value types
+	send(",");
 
 	// Send the value type
 	auto valueType = MapType::ValueType(type);
 	sendDuckType::Any(valueType);
 
 	/* Finish the map by sending suffix */
-	send(")");
+	send(">");
 }
 
 
 void sendDuckType::Struct(const LogicalType &type)
 {
 	// Start the struct by sending a prefix
-	send("STRUCT(");
+	send("STRUCT<");
+	string separator = "";
 
 	// Do for each field of the struct
 	idx_t nrChildren = StructType::GetChildCount(type);
 	for (idx_t i = 0; i < nrChildren; i++)
 	{
+		send(separator);
+		separator = ",";
+
 		// Send the name of the field
 		const string &name = StructType::GetChildName(type, i);
 		send(name);
 
 		// Send the separator between field and type
-		send(":");
+		if (name != "")
+		    send(":");
 
 		/* send the type of the field */
 		LogicalType childType = StructType::GetChildType(type, i);
 		sendDuckType::Any(childType);
-
-		send(", ");
 	}
 
 	/* Finish by sending a suffix */
-	send(")");
+	send(">");
 }
 
 void sendDuckType::List(const LogicalType &type)
 {
-	send("LIST(");
+	send("LIST<");
 	const LogicalType &childType = ListType::GetChildType(type);
 	sendDuckType::Any(childType);
-	send(")");
+	send(">");
 }
 
 void sendDuckType::Array(const LogicalType &type)
 {
-	send("ARRAY(");
+	send("ARRAY<");
 	const LogicalType &childType = ArrayType::GetChildType(type);
 	sendDuckType::Any(childType);
-	send(")");
+	send(">");
 }
 
 void sendDuckType::Enum(const LogicalType &type)
 {
-	send("ENUM(");
-	const char *separator = "";
+	send("ENUM<");
+	string separator = "";
 
-	idx_t nrChildren = EnumType::GetSize(type);
+	/* For each enum value */
+	idx_t nrChildren = EnumType::  GetSize(type);
 	for (idx_t i = 0; i < nrChildren; i++)
 	{
 		send(separator);
+		separator = ",";
 
 		const string_t &tag = EnumType::GetString(type, i);
 		send(tag.GetString());
-
-		separator = ", ";
 	}
 
-	send(")");
+	send(">");
 }
 
 
 void sendDuckType::Union(const LogicalType &type)
 {
-	send("UNION(");
-
-	const char *separator = "";
+	send("UNION<");
+	string separator = "";
 
 	// Do for each member
-	idx_t nrChildren = duckdb::UnionType::GetMemberCount(type);
+	idx_t nrChildren = duckdb::UnionType ::GetMemberCount(type);
 	for (idx_t i = 0; i < nrChildren; i++)
 	{
-
 		send(separator);
+		separator = ",";
 
 		// Send name of the member
 		const string &name = duckdb::UnionType::GetMemberName(type, i);
 		send(name);
-		send(":");
+
+		// Send separator between name and type
+		if (name != "")
+		    send(":");
 
 		// Send the type of the member
 		const LogicalType &childType = duckdb::UnionType::GetMemberType(type, i);
 		sendDuckType::Any(childType);
-
-		// Complete the UNION string
-		send(")");
-
-		separator = ", ";
 	}
 
-	send(")");
+	send(">");
 }
 
 void sendDuckType::Decimal(const LogicalType &type)
@@ -192,5 +199,8 @@ void sendDuckType::Decimal(const LogicalType &type)
 
 void sendDuckType::Primitive(const LogicalType &type)
 {
-	send(LogicalTypeIdToString(type.id()));
+	if (type.id() == LogicalTypeId::DECIMAL)
+		sendDuckType::Decimal(type);
+	else
+	    send(LogicalTypeIdToString(type.id()));
 }
