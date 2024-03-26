@@ -10,6 +10,7 @@ using std::cout;
 
 extern void send(const char* text);
 extern void send(const string text);
+extern void send(int64_t intValue);
 
 extern void sendDuckType(const duckdb::QueryResult &result);
 extern const char* typeName(duckdb_type typeId);

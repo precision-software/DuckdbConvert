@@ -25,12 +25,16 @@ int main()
 		"		'amphibians':"
 		"			{'yes':'frog', 'maybe': 'salamander', 'huh': 'dragon', 'no':'toad'},"
 		"        'row': (1, 107.66, 3.5, 17),"
-		"        'map': MAP(['abc', 'def', 'efg'], [1.23, 4.56, 7.99]::float[])"
+		"        'map': MAP(['abc', 'def', 'efg'], [1.23, 4.56, 7.99]::float[]),"
+		"        'array': array_value('abc', 'def', 'efg'),"
+		"        'list': [1.23, 4.56, 7.89],"
+		"        'mood': 'happy'::ENUM('sad', 'happy', 'other'),"
+		"        'union': union_value(str :='howdy')::UNION(num INT, str VARCHAR),"
 		"}";
 
 	auto result = con.SendQuery(sql);
 
-	//sendDuckType(*result);
+	sendDuckType(*result);
 	sendDuckData(*result);
 
 

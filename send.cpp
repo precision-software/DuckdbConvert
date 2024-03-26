@@ -4,10 +4,11 @@
 #include <iostream>
 typedef uint64_t idx_t;
 
-static int level = 0;
 
 void send(const char* text)
 {
+	static idx_t level = 0;
+
 	idx_t len = strlen(text);
 	if (len > 0 && text[len-1] == '(')
 	{
@@ -23,7 +24,8 @@ void send(const char* text)
 	{
 		// Unindent old line
 		std::cout << text;
-		level--;
+		if (level > 0)
+			level--;
 	}
 
 	else
@@ -35,4 +37,9 @@ void send(const char* text)
 void send(const std::string text)
 {
 	send(text.c_str());
+}
+
+void send(int64_t intValue)
+{
+	send(std::to_string(intValue));
 }

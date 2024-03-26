@@ -125,10 +125,52 @@ void sendDuckData::Map(const Value &value)
 
 }
 
-void sendDuckData::Array(const Value &value){}
-void sendDuckData::Enum(const Value &value){}
-void sendDuckData::List(const Value &value) {}
-void sendDuckData::Union(const Value &value){}
+void sendDuckData::Array(const Value &value)
+{
+	send("ARRAY_DATA(");
+	const char *separator = "";
+	for (const auto &child : ArrayValue::GetChildren(value))
+	{
+		send(separator);
+		sendDuckData::Val(child);
+		separator = ", ";
+	}
+	send(")");
+}
+
+
+void sendDuckData::Enum(const Value &value)
+{
+	const LogicalType type = value.type();
+	const auto &name = EnumType::GetValue(value);
+	const auto &idx = EnumType::GetPos(type, name);
+	send(idx);
+}
+
+
+void sendDuckData::List(const Value &value)
+{
+	send("LIST_DATA(");
+	const char *separator = "";
+	for (const auto &child : ListValue::GetChildren(value))
+	{
+		send(separator);
+		sendDuckData::Val(child);
+		separator = ", ";
+	}
+	send(")");
+
+}
+void sendDuckData::Union(const Value &value)
+{
+	send("UNION_DATA(");
+	const auto tag = UnionValue::GetTag(value);
+	const auto child = UnionValue::GetValue(value);
+	send(tag);
+	send(":");
+	sendDuckData::Val(child);
+	send(")");
+}
 
 
 void sendDuckData::Primitive(const Value &value)
