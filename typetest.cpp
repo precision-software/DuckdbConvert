@@ -28,13 +28,12 @@ int main()
 		"        'map': MAP(['abc', 'def', 'efg'], [1.23, 4.56, 7.99]::float[])"
 		"}";
 
-	auto result = con.Query(sql);
+	auto result = con.SendQuery(sql);
 
-	for (LogicalType type: result->types)
-		sendDuckType(type);
+	//sendDuckType(*result);
+	sendDuckData(*result);
 
-	while(auto chunk = result->Fetch())
-		sendDuckData(chunk.get());
+
 
 	return 0;
 }

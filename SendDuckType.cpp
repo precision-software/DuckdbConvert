@@ -6,11 +6,6 @@
 
 using namespace duckdb;
 
-using std::string;
-using std::cout;
-
-void send(const char* text) {cout << text;}
-void send(const string text) {cout << text;}
 /*
  * Convert a DuckDb type to a Postgres type.
  * Creates and reuses anonymous Postgres types as needed.
@@ -19,7 +14,7 @@ void send(const string text) {cout << text;}
  * TODO:   maybe ... return a list of types including alias types, bottom up order.
  * TODO:   maybe ... then just use the alias name when referenced in higher types.
  */
-void sendDuckType(const LogicalType type) {
+void sendDuckType(const LogicalType &type) {
 
     LogicalTypeId typeId = type.id();
     switch (typeId) {
@@ -119,4 +114,16 @@ void sendDuckType(const LogicalType type) {
 		  send(LogicalTypeIdToString(typeId));
 		  break;
     }
+}
+
+
+void sendDuckType(const QueryResult &result)
+{
+	send("TYPES(\n");
+	for (const auto &type: result.types)
+	{
+		sendDuckType(type);
+		send(", \n");
+	}
+	send(")\n");
 }
