@@ -21,11 +21,5 @@ extern void sendDuckData(duckdb::QueryResult &result);
  * Used for debug output
  */
 #define debug printf
-static int level = 0;
-static void indent()
-{
-	for (int i=0; i<level; i++)
-		debug("   ");
-}
 
 #endif

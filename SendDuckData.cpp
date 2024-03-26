@@ -5,13 +5,12 @@
 
 using namespace duckdb;
 
+// Forward refs
+void sendDuckData(const DataChunk &chunk);
+void sendDuckData(const DataChunk &chunk, idx_t row);
 
 struct sendDuckData {
-	static void Result(QueryResult &result);
-	static void Chunk(const DataChunk &chunk);
-	static void Row(const DataChunk &chunk, idx_t row);
-
-	static void Val(const Value &value);
+	static void Any(const Value &value);
 	static void Map(const Value &value);
 	static void Array(const Value &value);
 	static void Struct(const Value &value);
@@ -23,53 +22,52 @@ struct sendDuckData {
 
 void sendDuckData(QueryResult &result)
 {
-	sendDuckData::Result(result);
-}
+	send("RESULT_DATA(");
 
-
-void sendDuckData::Result(QueryResult &result)
-{
 	// Send each chunk in the result
 	while (const auto chunk = result.Fetch())
 	{
-		send("RESULT_DATA(");
-		sendDuckData::Chunk(*chunk);
-		send(")");
+		sendDuckData(*chunk);
+		send(", ");
 	}
+
+	send(")");
 }
 
-void sendDuckData::Chunk(const DataChunk &chunk)
+void sendDuckData(const DataChunk &chunk)
 {
+	// Send the prefix
+	send("CHUNK_DATA(");
+
 	// Send each row of data from the chunk
 	idx_t nrRows = chunk.size();
 	for (idx_t row = 0; row < nrRows; row++)
 	{
-		send("CHUNK_DATA(");
-		if (row != 0)
-			send(", ");
-		sendDuckData::Row(chunk, row);
-		send(")");
+		sendDuckData(chunk, row);
+		send(", ");
 	}
+
+	// Send the suffix
+	send(")");
 }
 
 
-void sendDuckData::Row(const DataChunk &chunk, idx_t row)
+void sendDuckData(const DataChunk &chunk, idx_t row)
 {
 	// Send each column of data from the row
 	idx_t nrColumns = chunk.ColumnCount();
 	send("ROW_DATA(");
 	for (idx_t col = 0; col < nrColumns; col++)
 	{
-		if (col != 0)
-			send(", ");
 		auto value = chunk.GetValue(col, row);
-		sendDuckData::Val(value);
+		sendDuckData::Any(value);
+		send(", ");
 	}
 	send(")");
 }
 
 
-void sendDuckData::Val(const Value &value)
+void sendDuckData::Any(const Value &value)
 {
 	LogicalTypeId typeId = value.type().id();
 	switch (typeId)
@@ -95,12 +93,10 @@ void sendDuckData::Val(const Value &value)
 void sendDuckData::Struct(const Value &value)
 {
 	send("STRUCT_DATA(");
-	const char *separator = "";
 	for (const auto child : StructValue::GetChildren(value))
 	{
-		send(separator);
-		sendDuckData::Val(child);
-		separator = ", ";
+		sendDuckData::Any(child);
+		send(", ");
 	}
 	send(")");
 }
@@ -110,19 +106,29 @@ void sendDuckData::Map(const Value &value)
 {
 	send("MAP_DATA(");
 
-	const char *separator = "";
+	// Send array of keys
+	send("ARRAY_DATA(");
 	for (const auto &pair: ListValue::GetChildren(value))
 	{
-		send(separator);
-		sendDuckData::Val(pair);
-
-        separator = ", ";
+		const auto &key = StructValue::GetChildren(pair)[0];
+		sendDuckData::Any(key);
+		send(", ");
 	}
+	send(")");
+	send(", ");
 
+	// Send array of values
+	send("ARRAY_DATA(");
+	for (const auto &pair : ListValue::GetChildren(value))
+	{
+		const auto &value = StructValue::GetChildren(pair)[1];
+		sendDuckData::Any(value);
+		send(", ");
+	}
 	send(")");
 
-
-
+	// Send the Map suffix
+	send(")");
 }
 
 void sendDuckData::Array(const Value &value)
@@ -132,7 +138,7 @@ void sendDuckData::Array(const Value &value)
 	for (const auto &child : ArrayValue::GetChildren(value))
 	{
 		send(separator);
-		sendDuckData::Val(child);
+		sendDuckData::Any(child);
 		separator = ", ";
 	}
 	send(")");
@@ -155,7 +161,7 @@ void sendDuckData::List(const Value &value)
 	for (const auto &child : ListValue::GetChildren(value))
 	{
 		send(separator);
-		sendDuckData::Val(child);
+		sendDuckData::Any(child);
 		separator = ", ";
 	}
 	send(")");
@@ -168,7 +174,7 @@ void sendDuckData::Union(const Value &value)
 	const auto child = UnionValue::GetValue(value);
 	send(tag);
 	send(":");
-	sendDuckData::Val(child);
+	sendDuckData::Any(child);
 	send(")");
 }
 
