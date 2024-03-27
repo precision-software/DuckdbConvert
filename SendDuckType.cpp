@@ -1,3 +1,30 @@
+/* ---------------------------------------------------------------------------------
+ * Routines for sending the data types from a Duckdb query back to postgres.
+ *
+ * Data types are sent as text because the duckdb server doesn't have a connection
+ * into the postgres database. It is unable to lookup postgres oids.
+ *
+ * Once the textual types are sent to the postgres-duckdb client, the
+ * client is able to look up and create corresponding postgres oids,
+ * which will be used later to load data into postgres.
+ *
+ * Duckdb supports compound types which can be nested.
+ *    STRUCT<a:type1, b:type2, ..., z:typeN>  - combine fields into a common structure.
+ *    MAP<keyType,valueType>                  - map values of one type onto another type
+ *    LIST<type>                              - a variable length list
+ *    UNION<tag1:type1, tag2:type2, ..., tagN:typeN> - exactly one of the values is not NULL.
+ *    ARRAY<type>                             - like a LIST, but closer to SQL fixed size arrays.
+ *
+ * along with the basic SQL types
+ *    TEXT, INTEGER, DECIMAL(7,2), TIME ...
+ *
+ * Note Duckdb compound types can be nested arbitrarily.
+ *   eg.   STRUCT<a:STRUCT<b:integer>,c:text, d:MAP<text,LIST<integer>>>>
+ *
+ * Postgres doesn't directly support all of the compound types, but they can be emulated
+ * using other postgres types.
+ *
+ * ---------------------------------------------------------------------------------*/
 #include "duckdbconvert.hpp"
 #include "duckdb.h"
 #include <iostream>
@@ -6,6 +33,7 @@
 
 using namespace duckdb;
 
+// Functions for formatting and sending textual type strings to the postgres-duckdb client.
 struct sendDuckType
 {
 	static void Any(const LogicalType &type);
@@ -19,42 +47,12 @@ struct sendDuckType
 	static void Decimal(const LogicalType &type);
 };
 
-/*
- * Convert a DuckDb type to a Postgres type.
- * Creates and reuses anonymous Postgres types as needed.
- *
- * TODO: how to deal with aliases (already named dependent types).
- * TODO:   maybe ... return a list of types including alias types, bottom up order.
- * TODO:   maybe ... then just use the alias name when referenced in higher types.
- *
- * Would be nice if we could add decorative method "send()" to LogicalType
- * like can be done in Scala.
- */
-
-void sendDuckType::Any(const LogicalType &type)
-{
-	switch (type.id())
-	{
-		case LogicalTypeId::MAP:
-			return sendDuckType::Map(type);
-		case LogicalTypeId::STRUCT:
-			return sendDuckType::Struct(type);
-		case LogicalTypeId::UNION:
-			return sendDuckType::Union(type);
-		case LogicalTypeId::LIST:
-			return sendDuckType::List(type);
-		case LogicalTypeId::ARRAY:
-			return sendDuckType::Array(type);
-		case LogicalTypeId::ENUM:
-			return sendDuckType::Enum(type);
-		default:
-			return sendDuckType::Primitive(type);
-	}
-}
 
 
 /*
- * Send the types which exist in the query result.
+ * Send the types which are returned by a query.
+ * Represented as a pseudo "ROW<>" type which just holds them together.
+ *   eg.   ROW<time, integer, STRUCT<a:double>>
  */
 void sendDuckTypeResult(const QueryResult &result)
 {
@@ -72,6 +70,37 @@ void sendDuckTypeResult(const QueryResult &result)
 }
 
 
+/*
+ * Send the text representation of a recursive Duckdb type.
+ */
+void sendDuckType::Any(const LogicalType &type)
+{
+	switch (type.id())
+	{
+		case LogicalTypeId::MAP:
+			return sendDuckType::Map(type);
+		case LogicalTypeId::STRUCT:
+			return sendDuckType::Struct(type);
+		case LogicalTypeId::UNION:
+			return sendDuckType::Union(type);
+		case LogicalTypeId::LIST:
+			return sendDuckType::List(type);
+		case LogicalTypeId::ARRAY:
+			return sendDuckType::Array(type);
+		case LogicalTypeId::ENUM:
+			return sendDuckType::Enum(type);
+		case LogicalTypeId::DECIMAL:
+			return sendDuckType::Decimal(type);
+		default:
+			return sendDuckType::Primitive(type);
+	}
+}
+
+
+/*
+ * Format and send a MAP data type.
+ *    eg.   MAP<text,integer>
+ */
 void sendDuckType::Map(const LogicalType &type)
 {
 	// Start the MAP by sending prefix
@@ -92,7 +121,10 @@ void sendDuckType::Map(const LogicalType &type)
 	send(">");
 }
 
-
+/*
+ * Format and send a STRUCT data type.
+ *     eg.  STRUCT<name1:type1, name2:type2>
+ */
 void sendDuckType::Struct(const LogicalType &type)
 {
 	// Start the struct by sending a prefix
@@ -123,6 +155,11 @@ void sendDuckType::Struct(const LogicalType &type)
 	send(">");
 }
 
+/*
+ * Format and send a LIST data type.
+ * Lists can be any size.
+ *    eg.  LIST<text>  would contain multiple strings.
+ */
 void sendDuckType::List(const LogicalType &type)
 {
 	send("LIST<");
@@ -131,6 +168,10 @@ void sendDuckType::List(const LogicalType &type)
 	send(">");
 }
 
+/*
+ * Format and send an ARRAY type.
+ *    eg.  ARRAY<text>
+ */
 void sendDuckType::Array(const LogicalType &type)
 {
 	send("ARRAY<");
@@ -139,6 +180,11 @@ void sendDuckType::Array(const LogicalType &type)
 	send(">");
 }
 
+
+/*
+ * Format and send an ENUM type.
+ *   eg.  ENUM<a,b,c>  declares an enum with three tags.
+ */
 void sendDuckType::Enum(const LogicalType &type)
 {
 	send("ENUM<");
@@ -159,6 +205,10 @@ void sendDuckType::Enum(const LogicalType &type)
 }
 
 
+/*
+ * Format and send a UNION type.
+ * A union contains multiple fields, exactly one of which is not NULL.
+ */
 void sendDuckType::Union(const LogicalType &type)
 {
 	send("UNION<");
@@ -187,6 +237,11 @@ void sendDuckType::Union(const LogicalType &type)
 	send(">");
 }
 
+
+/*
+ * Format and send a DECIMAL type, include width and precision.
+ *    eg.  DECIMAL(7,2)
+ */
 void sendDuckType::Decimal(const LogicalType &type)
 {
 	uint8_t width = DecimalType::GetWidth(type);
@@ -197,6 +252,12 @@ void sendDuckType::Decimal(const LogicalType &type)
 	send(buffer);
 }
 
+
+/*
+ * Format and send other primitive types.
+ * They just consist of the type name.
+ *    eg.   VARCHAR or BLOB
+ */
 void sendDuckType::Primitive(const LogicalType &type)
 {
 	if (type.id() == LogicalTypeId::DECIMAL)

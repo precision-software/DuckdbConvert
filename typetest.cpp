@@ -30,6 +30,9 @@ int main()
 		"        'list': [1.23, 4.56, 7.89],"
 		"        'mood': 'happy'::ENUM('sad', 'happy', 'other'),"
 		"        'union': union_value(str :='howdy')::UNION(num INT, str VARCHAR),"
+		"        'nestedList': [ ['a', 'b'], ['c', 'd', 'e'], [] ],"
+		"        'null':  NULL,"
+		"        'listOfNulls':  [NULL, NULL, NULL],"
 		"}";
 
 	auto result = con.SendQuery(sql);
