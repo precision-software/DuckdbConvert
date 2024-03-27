@@ -24,6 +24,8 @@
  * Postgres doesn't directly support all of the compound types, but they can be emulated
  * using other postgres types.
  *
+ * TODO: create type string instead of just sending it out? May be useful in other contexts.
+ *
  * ---------------------------------------------------------------------------------*/
 #include "duckdbconvert.hpp"
 #include "duckdb.h"

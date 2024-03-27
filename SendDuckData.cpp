@@ -34,7 +34,7 @@ struct sendDuckData {
 
 
 /*
- * Send all the data rows from a query.
+ * Send all the data result rows from a query.
  */
 void sendDuckDataResult(QueryResult &result)
 {
@@ -47,7 +47,7 @@ void sendDuckDataResult(QueryResult &result)
 
 /*
  * Send all the result rows from the current "chunk:".
- * Duckdb splits the query data into a series of "chunks",
+ * Duckdb splits the query result into a series of "chunks",
  * where each chunk contains a number of rows.
  *
  */
@@ -62,22 +62,22 @@ void sendDuckDataChunk(const DataChunk &chunk)
 }
 
 /*
- * Send a row of data from the query result.
+ * Send one row of data from the query result.
  */
 void sendDuckDataRow(const DataChunk &chunk, idx_t row)
 {
 	send("(");
 	string separator = "";
 
-	// Send each column of data from the row
+	// Send each column of data
 	idx_t nrColumns = chunk.ColumnCount();
 	for (idx_t col = 0; col < nrColumns; col++)
 	{
-		auto value = chunk.GetValue(col, row);
-		sendDuckData::Any(value);
-
 		send(separator);
 		separator = ",";
+
+		auto value = chunk.GetValue(col, row);
+		sendDuckData::Any(value);
 	}
 
 	send(")\n");
@@ -221,6 +221,7 @@ void sendDuckData::List(const Value &value)
 	{
 		send(separator);
 		separator = ",";
+
 		sendDuckData::Any(child);
 	}
 	send(")");
