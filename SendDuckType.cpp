@@ -8,10 +8,13 @@
  * client is able to look up and create corresponding postgres oids,
  * which will be used later to load data into postgres.
  *
+ * This syntax for naming types is based on Google's BigData, except ":" separates field names from their types.
+ * This makes hashing on types easier as we can simply strip all blanks. Otherwise we'd have to parse.
+ *
  * Duckdb supports compound types which can be nested.
  *    STRUCT<a:type1, b:type2, ..., z:typeN>  - combine fields into a common structure.
  *    MAP<keyType,valueType>                  - map values of one type onto another type
- *    LIST<type>                              - a variable length list
+ *    LIST<type>                              - a variable length list.
  *    UNION<tag1:type1, tag2:type2, ..., tagN:typeN> - exactly one of the values is not NULL.
  *    ARRAY<type>                             - like a LIST, but closer to SQL fixed size arrays.
  *
@@ -194,7 +197,7 @@ void sendDuckType::Enum(const LogicalType &type)
 	send("ENUM<");
 	string separator = "";
 
-	/* For each enum value */
+	// For each enum value
 	idx_t nrChildren = EnumType::  GetSize(type);
 	for (idx_t i = 0; i < nrChildren; i++)
 	{
