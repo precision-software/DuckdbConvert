@@ -1,14 +1,14 @@
 /* ------------------------------------------------------------------------------------
- * Routines to format and send Duckdb data to the postgres.
+ * Routines to format and send Duckdb values back to postgres.
  *
  * The values are delimited by paranthesis and contain no type information.
- * They must be interpreted in the context of their type.
+ * They must be interpreted in the context of their corresponding types.
  *'
- * eg.   LIST<VARCHAR>     ('a', 'b', 'c', 'Hello', 'World')
- * eg.   LIST<STRUCT<a:INTEGER, b:FLOAT>>     ( (1, 2.3)  (4, 5.6), (7, 8.9) )
+ * eg.    ('a', 'b', 'c', 'Hello', 'World')     LIST<VARCHAR>
+ * eg.    ( (1, 2.3)  (4, 5.6), (7, 8.9) )      LIST<STRUCT<a:INTEGER, b:FLOAT>>
  *
  * This current version formats text, but data could also be sent by the binary
- * wire protocal.
+ * wire protocal. To be done later.
  */
 #include "duckdbconvert.hpp"
 #include <stdio.h>
