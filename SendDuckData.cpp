@@ -1,4 +1,15 @@
-//
+/* ------------------------------------------------------------------------------------
+ * Routines to format and send Duckdb data to the postgres.
+ *
+ * The values are delimited by paranthesis and contain no type information.
+ * They must be interpreted in the context of their type.
+ *'
+ * eg.   LIST<VARCHAR>     ('a', 'b', 'c', 'Hello', 'World')
+ * eg.   LIST<STRUCT<a:INTEGER, b:FLOAT>>     ( (1, 2.3)  (4, 5.6), (7, 8.9) )
+ *
+ * This current version formats text, but data could also be sent by the binary
+ * wire protocal.
+ */
 #include "duckdbconvert.hpp"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +20,7 @@ using namespace duckdb;
 void sendDuckDataChunk(const DataChunk &chunk);
 void sendDuckDataRow(const DataChunk &chunk, idx_t row);
 
+// Routines to format and send data values.
 struct sendDuckData {
 	static void Any(const Value &value);
 	static void Map(const Value &value);
@@ -20,6 +32,10 @@ struct sendDuckData {
 	static void Primitive(const Value &value);
 };
 
+
+/*
+ * Send all the data rows from a query.
+ */
 void sendDuckDataResult(QueryResult &result)
 {
 	// Send each chunk in the result
@@ -29,6 +45,12 @@ void sendDuckDataResult(QueryResult &result)
 	}
 }
 
+/*
+ * Send all the result rows from the current "chunk:".
+ * Duckdb splits the query data into a series of "chunks",
+ * where each chunk contains a number of rows.
+ *
+ */
 void sendDuckDataChunk(const DataChunk &chunk)
 {
 	// Send each row of data from the chunk
@@ -62,6 +84,9 @@ void sendDuckDataRow(const DataChunk &chunk, idx_t row)
 }
 
 
+/*
+ * Send an arbitrary Duckdb data value.
+ */
 void sendDuckData::Any(const Value &value)
 {
 	LogicalTypeId typeId = value.type().id();
@@ -84,7 +109,10 @@ void sendDuckData::Any(const Value &value)
 	}
 }
 
-
+/*
+ * Send a duckdb struct value. It will be used to populate a compound type in postgres.
+ *     eg.  ('a', 5, 13.7) :: STRUCT<field1:text, field2:integer, field3:float>
+ */
 void sendDuckData::Struct(const Value &value)
 {
 	send("(");
@@ -103,6 +131,14 @@ void sendDuckData::Struct(const Value &value)
 }
 
 
+/*
+ * Send a MAP data value.
+ * Postgres doesn't directly implemeht MAP types, but they can be emulated
+ * using a STRUCT with an array of keys and an array of values.
+ * Duckdb stores the map as an array of pairs, so we "unzip" them
+ * before sending to postgres.
+ *    eg.    (  ('a', 'b', 'c'), ( [1, 2], [3], [] ) )  :: MAP<text,ARRAY<integer>>
+ */
 void sendDuckData::Map(const Value &value)
 {
 	send("(");
@@ -122,7 +158,7 @@ void sendDuckData::Map(const Value &value)
 		sendDuckData::Any(key);
 	}
 
-	// Between the keys and values
+	// Punctution between the keys and values
 	send(").(");
 
 	// Send array of values
@@ -138,6 +174,10 @@ void sendDuckData::Map(const Value &value)
 	send("))");
 }
 
+/*
+ * Send an array back to postgres.
+ *   eg. ('abc', 'def', 'ghi')::ARRAY<text>
+ */
 void sendDuckData::Array(const Value &value)
 {
 	send("(");
@@ -154,6 +194,12 @@ void sendDuckData::Array(const Value &value)
 }
 
 
+/*
+ * Send an ENUM value back to postgres.
+ * For compactness, it consists of a small integer tag
+ * and the corresponding value.
+ *    eg.    3   :: ENUM(a,b,c)
+ */
 void sendDuckData::Enum(const Value &value)
 {
 	const LogicalType type = value.type();
@@ -162,7 +208,10 @@ void sendDuckData::Enum(const Value &value)
 	send(idx);
 }
 
-
+/*
+ * Send a list of values.
+ *     eg.     (1, 2, 3, 5)  :: LIST<integer>
+ */
 void sendDuckData::List(const Value &value)
 {
 	send("(");
@@ -177,6 +226,12 @@ void sendDuckData::List(const Value &value)
 	send(")");
 
 }
+
+
+/*
+ * Send one of the possible values, along with a tag.
+ *     eg.   (2, 'hello')    ::   UNION<a:integer, b:float, c:tesxt>
+ */
 void sendDuckData::Union(const Value &value)
 {
 	send("(");
@@ -189,6 +244,10 @@ void sendDuckData::Union(const Value &value)
 }
 
 
+/*
+ * Send a primitive value. Strings will be properly qouted and escaped.
+ *   eg     'howdy'   :: varchar
+ */
 void sendDuckData::Primitive(const Value &value)
 {
 	send(value.ToSQLString());

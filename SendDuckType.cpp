@@ -58,6 +58,7 @@ void sendDuckTypeResult(const QueryResult &result)
 {
 	send("ROW<");
 	string separator = "";
+
 	idx_t nrCols = result.types.size();
 	for (int col = 0; col < nrCols; col++)
 	{
@@ -66,6 +67,7 @@ void sendDuckTypeResult(const QueryResult &result)
 
 		sendDuckType::Any(result.types[col]);
 	}
+
 	send(">\n");
 }
 
